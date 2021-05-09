@@ -1,6 +1,6 @@
 import "./CodePage.css";
 
-import { CodeDetails, Contract } from "@cosmjs/cosmwasm-launchpad";
+import { CodeDetails } from "@cosmjs/cosmwasm-stargate";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -26,7 +26,7 @@ export function CodePage(): JSX.Element {
   const codeId = parseInt(codeIdParam || "0", 10);
 
   const [details, setDetails] = React.useState<CodeDetails | ErrorState | LoadingState>(loadingState);
-  const [contracts, setContracts] = React.useState<readonly Contract[] | ErrorState | LoadingState>(
+  const [contracts, setContracts] = React.useState<readonly string[] | ErrorState | LoadingState>(
     loadingState,
   );
   const [uploadTxHash, setUploadTxHash] = React.useState<string | undefined | ErrorState | LoadingState>(
@@ -42,12 +42,14 @@ export function CodePage(): JSX.Element {
       ?.getCodeDetails(codeId)
       .then(setDetails)
       .catch(() => setDetails(errorState));
-    (client?.searchTx({
-      tags: makeTags(`message.module=wasm&message.action=store-code&message.code_id=${codeId}`),
-    }) as Promise<ReadonlyArray<{ readonly hash: string }>>).then((results) => {
-      const first = results.find(() => true);
-      setUploadTxHash(first?.hash);
-    });
+    client
+      ?.searchTx({
+        tags: makeTags(`message.module=wasm&message.action=store-code&message.code_id=${codeId}`),
+      })
+      .then((results) => {
+        const first = results.find(() => true);
+        setUploadTxHash(first?.hash);
+      });
   }, [client, codeId]);
 
   const pageTitle = <span>Code #{codeId}</span>;
@@ -117,8 +119,8 @@ export function CodePage(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {contracts.map((contract, index) => (
-                    <InstanceRow position={index + 1} contract={contract} key={contract.address} />
+                  {contracts.map((address, index) => (
+                    <InstanceRow position={index + 1} address={address} key={address} />
                   ))}
                 </tbody>
               </table>

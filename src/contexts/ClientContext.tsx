@@ -1,30 +1,15 @@
-import { codec } from "@cosmjs/cosmwasm-stargate";
-import { Registry } from "@cosmjs/proto-signing";
 import React from "react";
 
-import {
-  LaunchpadClient,
-  LaunchpadSigningClient,
-  StargateClient,
-  StargateSigningClient,
-} from "../ui-utils/clients";
-import {
-  msgExecuteContractTypeUrl,
-  msgInstantiateContractTypeUrl,
-  msgStoreCodeTypeUrl,
-} from "../ui-utils/txs";
-
-const { MsgExecuteContract, MsgInstantiateContract, MsgStoreCode } = codec.cosmwasm.wasm.v1beta1;
+import { StargateClient, StargateSigningClient } from "../ui-utils/clients";
 
 export interface ClientContextValue {
   readonly nodeUrl: string;
-  readonly client: LaunchpadClient | StargateClient | null;
-  readonly typeRegistry: Registry;
+  readonly client: StargateClient | null;
   readonly resetClient: (nodeUrl: string) => void;
   readonly userAddress?: string;
   readonly setUserAddress: (newUserAddress?: string) => void;
-  readonly signingClient?: LaunchpadSigningClient | StargateSigningClient;
-  readonly setSigningClient: (newSigningClient?: LaunchpadSigningClient | StargateSigningClient) => void;
+  readonly signingClient?: StargateSigningClient;
+  readonly setSigningClient: (newSigningClient?: StargateSigningClient) => void;
 }
 
 /**
@@ -35,11 +20,6 @@ export interface ClientContextValue {
 const dummyContext: ClientContextValue = {
   nodeUrl: "",
   client: null,
-  typeRegistry: new Registry([
-    [msgStoreCodeTypeUrl, MsgStoreCode],
-    [msgInstantiateContractTypeUrl, MsgInstantiateContract],
-    [msgExecuteContractTypeUrl, MsgExecuteContract],
-  ]),
   resetClient: () => {},
   setUserAddress: () => {},
   setSigningClient: () => {},

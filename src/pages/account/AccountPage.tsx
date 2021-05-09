@@ -1,6 +1,5 @@
-import { Coin, IndexedTx as LaunchpadIndexedTx, isMsgSend, MsgSend } from "@cosmjs/launchpad";
-import { Registry } from "@cosmjs/proto-signing";
-import { codec, IndexedTx } from "@cosmjs/stargate";
+import { decodeTxRaw, Registry } from "@cosmjs/proto-signing";
+import { Coin, IndexedTx } from "@cosmjs/stargate";
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -9,7 +8,7 @@ import { Header } from "../../components/Header";
 import { ClientContext } from "../../contexts/ClientContext";
 import { settings } from "../../settings";
 import { ellideMiddle, printableBalance } from "../../ui-utils";
-import { isLaunchpadClient, isStargateClient, LaunchpadClient, StargateClient } from "../../ui-utils/clients";
+import { StargateClient } from "../../ui-utils/clients";
 import {
   ErrorState,
   errorState,
@@ -21,13 +20,9 @@ import {
 import { AnyMsgSend, isAnyMsgSend } from "../../ui-utils/txs";
 import { Transfer, TransfersTable } from "./TransfersTable";
 
-type ICoin = codec.cosmos.base.v1beta1.ICoin;
-
-const { Tx } = codec.cosmos.tx.v1beta1;
-
 function getTransferFromStargateMsgSend(typeRegistry: Registry, tx: IndexedTx) {
   return (msg: AnyMsgSend, i: number) => {
-    const decodedMsg = typeRegistry.decode({ typeUrl: msg.type_url, value: msg.value });
+    const decodedMsg = typeRegistry.decode({ typeUrl: msg.typeUrl, value: msg.value });
     return {
       key: `${tx.hash}_${i}`,
       height: tx.height,
@@ -37,49 +32,10 @@ function getTransferFromStargateMsgSend(typeRegistry: Registry, tx: IndexedTx) {
   };
 }
 
-function getTransferFromLaunchpadMsgSend(tx: LaunchpadIndexedTx) {
-  return (msg: MsgSend, i: number): Transfer => ({
-    key: `${tx.hash}_${i}`,
-    height: tx.height,
-    transactionId: tx.hash,
-    msg: {
-      fromAddress: msg.value.from_address,
-      toAddress: msg.value.to_address,
-      amount: [...msg.value.amount],
-    },
-  });
-}
-
-const launchpadEffect = (
-  client: LaunchpadClient,
-  address: string,
-  setBalance: (balance: readonly ICoin[] | ErrorState | LoadingState) => void,
-  setTransfers: (transfers: readonly Transfer[] | ErrorState | LoadingState) => void,
-) => (): void => {
-  client
-    .getAccount(address)
-    .then((account) => setBalance(account?.balance ?? []))
-    .catch(() => setBalance(errorState));
-  client
-    .searchTx({ sentFromOrTo: address })
-    .then((txs) => {
-      const out = txs.reduce(
-        (transfers: readonly Transfer[], tx: LaunchpadIndexedTx): readonly Transfer[] => {
-          const txTransfers = tx.tx.value.msg.filter(isMsgSend).map(getTransferFromLaunchpadMsgSend(tx));
-          return [...transfers, ...txTransfers];
-        },
-        [],
-      );
-      setTransfers(out);
-    })
-    .catch(() => setBalance(errorState));
-};
-
 const stargateEffect = (
   client: StargateClient,
   address: string,
-  typeRegistry: Registry,
-  setBalance: (balance: readonly ICoin[] | ErrorState | LoadingState) => void,
+  setBalance: (balance: readonly Coin[] | ErrorState | LoadingState) => void,
   setTransfers: (transfers: readonly Transfer[] | ErrorState | LoadingState) => void,
 ) => (): void => {
   Promise.all(settings.backend.denominations.map((denom) => client.getBalance(address, denom)))
@@ -92,10 +48,10 @@ const stargateEffect = (
     .searchTx({ sentFromOrTo: address })
     .then((txs) => {
       const out = txs.reduce((transfers: readonly Transfer[], tx: IndexedTx): readonly Transfer[] => {
-        const decodedTx = Tx.decode(tx.tx);
+        const decodedTx = decodeTxRaw(tx.tx);
         const txTransfers = (decodedTx?.body?.messages ?? [])
           .filter(isAnyMsgSend)
-          .map(getTransferFromStargateMsgSend(typeRegistry, tx));
+          .map(getTransferFromStargateMsgSend((client as any).registry, tx));
         return [...transfers, ...txTransfers];
       }, []);
       setTransfers(out);
@@ -104,23 +60,19 @@ const stargateEffect = (
 };
 
 export function AccountPage(): JSX.Element {
-  const { client, typeRegistry } = React.useContext(ClientContext);
+  const { client } = React.useContext(ClientContext);
   const { address: addressParam } = useParams<{ readonly address: string }>();
   const address = addressParam || "";
 
-  const [balance, setBalance] = React.useState<readonly ICoin[] | ErrorState | LoadingState>(loadingState);
+  const [balance, setBalance] = React.useState<readonly Coin[] | ErrorState | LoadingState>(loadingState);
   const [transfers, setTransfers] = React.useState<readonly Transfer[] | ErrorState | LoadingState>(
     loadingState,
   );
 
-  React.useEffect(
-    isStargateClient(client)
-      ? stargateEffect(client, address, typeRegistry, setBalance, setTransfers)
-      : isLaunchpadClient(client)
-      ? launchpadEffect(client, address, setBalance, setTransfers)
-      : () => {},
-    [address, client, typeRegistry],
-  );
+  React.useEffect(client ? stargateEffect(client, address, setBalance, setTransfers) : () => {}, [
+    address,
+    client,
+  ]);
 
   const pageTitle = <span title={address}>Account {ellideMiddle(address, 15)}</span>;
 
